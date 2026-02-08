@@ -18,7 +18,7 @@ async def verify_webhook(
     VERIFY_TOKEN = "meu_token_secreto" 
     
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        print("✅ Webhook validado com sucesso!")
+        print("Webhook validado com sucesso!")
         return int(hub_challenge)
     return {"status": "error", "message": "Token inválido"}
 
@@ -27,11 +27,11 @@ async def verify_webhook(
 async def receive_webhook(request: Request):
     try:
         data = await request.json()
-        print("\n📩 NOVA MENSAGEM RECEBIDA:")
+        print("\nNOVA MENSAGEM RECEBIDA:")
         print(data) # Aqui você vê o JSON mágico
         print("-" * 30)
     except Exception as e:
-        print(f"❌ Erro ao processar: {e}")
+        print(f"Erro ao processar: {e}")
     
     return {"status": "received"}
 
