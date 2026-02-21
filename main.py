@@ -2,19 +2,57 @@
 # Código limpo e pronto para uso.
 # main.py
 
-from fastapi import FastAPI, Query, Request
+import os
 import uvicorn
+from fastapi import FastAPI, Request
 import requests
+from dotenv import load_dotenv  # <-- Importa o leitor de .env
+from openai import OpenAI       # <-- Importa a IA
 
-#--------------- Credenciais -----------------
-TOKEN = "EAAMjUMSwBMcBQn3x53PdJ7gcziXiL9jdhptiDQq7xbddthQKzKolCL1XvEIJWmHM3W6gk5h5z87ScsIIh53d1SKQVAzhpY5HqZBLwejBRmEaigFJ4ZAkQWjDU5L0IBTdtKBrOTZCH2ZBWOKAe2Kg7joUw9zdh453zsXsZBZCQZCMD6E3HRZCHEsPXih3EFCF7ZAh9bl3iiCAt2TmybZA5x9Xa6E69LD4aDJpw57YMNMXNvss1zmDxGxP740hS9OV15Ecpqu5z5D6cEzy7FbZAAoJjPeZBTdf"
-PHONE_ID = "946393031891418"
+# 1. Carrega as variáveis do arquivo .env para a memória
+load_dotenv()
 
-# --------- Criando funções de ação -------------
+app = FastAPI()
+
+# 2. Pega as chaves de forma segura
+# (Certifique-se de que WHATSAPP_TOKEN e PHONE_ID também estejam no seu .env)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+PHONE_ID = os.getenv("PHONE_ID")
+
+# 3. Inicializa o cliente da IA
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# --- O CÉREBRO (IA) ---
+def consultar_ia(texto_usuario):
+    print("🧠 Consultando a OpenAI...")
+    try:
+        resposta = client.chat.completions.create(
+            model="gpt-3.5-turbo", # Pode usar gpt-4o-mini se preferir (é mais barato e rápido)
+            messages=[
+                # SYSTEM PROMPT: A personalidade e as regras do bot
+                {"role": "system", "content": """
+                 Você é o assistente virtual da barbearia 'Cortes do Fabio'.
+                 Seja amigável, direto e use um tom natural e conversacional.
+                 Se o cliente perguntar preços: Corte R$50, Barba R$30.
+                 Se o cliente quiser agendar, diga que em breve você terá acesso à agenda, 
+                 mas por enquanto está apenas em fase de testes.
+                 Responda de forma concisa (máximo 50 palavras).
+                 """},
+                {"role": "user", "content": texto_usuario}
+            ],
+            temperature=0.7 # Controla a criatividade (0 = robótico, 1 = muito criativo)
+        )
+        return resposta.choices[0].message.content
+    except Exception as e:
+        print(f"❌ Erro na IA: {e}")
+        return "Desculpe, estou com um pouco de dor de cabeça agora. Tente novamente em instantes."
+
+# --- FUNÇÃO DE ENVIO DE WHATSAPP ---
 def enviar_resposta(numero_destino, texto_resposta):
     url = f"https://graph.facebook.com/v21.0/{PHONE_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {TOKEN}",
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
     payload = {
@@ -23,18 +61,11 @@ def enviar_resposta(numero_destino, texto_resposta):
         "type": "text",
         "text": {"body": texto_resposta}
     }
-    
-    # Dispara a mensagem
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code == 200:
-        print(f"✅ Resposta enviada para {numero_destino}!")
-    else:
-        print(f"❌ Erro ao enviar: {response.text}")
+    requests.post(url, json=payload, headers=headers)
 
+# --- O WEBHOOK ---
+from fastapi import Query
 
-# --------- inicializando app ---------------
-app = FastAPI()
-# apenas confirmação de funcionamento
 @app.get("/")
 def home():
     return {"message": "O Bot está ON! 🤖 Vá para /webhook"}
@@ -46,61 +77,50 @@ async def verify_webhook(
     hub_challenge: str = Query(None, alias="hub.challenge"),
     hub_verify_token: str = Query(None, alias="hub.verify_token")
 ):
-    # DICA: Em produção, use variáveis de ambiente!
-    VERIFY_TOKEN = "meu_token_secreto" 
+    # Pode colocar a string direta aqui ou puxar do .env
+    VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "seu_token_secreto") 
     
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        print("Webhook validado com sucesso!")
+        print("Webhook validado pela Meta!")
         return int(hub_challenge)
-    return {"status": "error", "message": "Token inválido"}
+    return {"status": "error", "message": "Falha na validação"}
 
-# 2. Recebimento de Mensagens (POST)
-@app.post("/webhook")
+# 2. Recebimento das Mensagens (POST)
 @app.post("/webhook")
 async def receive_webhook(request: Request):
     try:
         body = await request.json()
         
-        # Navegando no JSON complexo do WhatsApp
-        entry = body["entry"][0]
-        changes = entry["changes"][0]
-        value = changes["value"]
+        entry = body.get("entry", [])[0]
+        changes = entry.get("changes", [])[0]
+        value = changes.get("value", {})
 
-        # CASO 1: É UMA MENSAGEM DE TEXTO?
+        # FILTRO: É MENSAGEM?
         if "messages" in value:
             message = value["messages"][0]
             numero_bruto = message["from"]
-            texto_usuario = message["text"]["body"]
-            nome = value["contacts"][0]["profile"]["name"]
-
+            
+            # Corrige o número
             if numero_bruto.startswith("55") and len(numero_bruto) == 12:
-                ddd = numero_bruto[2:4]
-                resto = numero_bruto[4:]
-                numero = f"55{ddd}9{resto}"
-                print(f"🔧 Número corrigido de {numero_bruto} para {numero}")
+                numero = f"55{numero_bruto[2:4]}9{numero_bruto[4:]}"
             else:
                 numero = numero_bruto
+
+            texto_usuario = message.get("text", {}).get("body", "")
+            nome = value["contacts"][0]["profile"]["name"]
             
-            print(f"📩 Recebido de {nome}: {texto_usuario}")
-            print(f"número de telefone: {numero}\n")
-            # --- AQUI ESTÁ A MÁGICA: O BOT RESPONDE! ---
-            nova_resposta = f"Olá {nome}! Você disse: '{texto_usuario}'"
-            enviar_resposta(numero, nova_resposta)
-
-
-        # CASO 2: É APENAS UM STATUS (visto, entregue)?
-        elif "statuses" in value:
-            status = value["statuses"][0]["status"]
-            print(f"📡 Status de entrega: {status}")
-
-        else:
-            print("⚠️ Evento desconhecido recebido.")
+            if texto_usuario:
+                print(f"📩 {nome} disse: {texto_usuario}")
+                
+                # --- A MÁGICA ACONTECE AQUI ---
+                resposta_ia = consultar_ia(texto_usuario)
+                
+                print(f"🤖 IA respondeu: {resposta_ia}")
+                enviar_resposta(numero, resposta_ia)
 
     except Exception as e:
-        # Se o JSON vier quebrado ou diferente do esperado
-        print(f"❌ Erro ao processar: {e}")
+        print(f"❌ Erro no webhook: {e}")
     
-    # Sempre retornar 200, senão o WhatsApp bloqueia seu número!
     return {"status": "received"}
 
 if __name__ == "__main__":
