@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 import requests
 from dotenv import load_dotenv  # <-- Importa o leitor de .env
 from openai import OpenAI       # <-- Importa a IA
+from fastapi.responses import PlainTextResponse
 
 # 1. Carrega as variáveis do arquivo .env para a memória
 load_dotenv()
@@ -19,6 +20,7 @@ app = FastAPI()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_ID = os.getenv("PHONE_ID")
+API_VERSION = os.getenv("API_VERSION")
 
 # 3. Inicializa o cliente da IA
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -46,11 +48,11 @@ def consultar_ia(texto_usuario):
         return resposta.choices[0].message.content
     except Exception as e:
         print(f"❌ Erro na IA: {e}")
-        return "Desculpe, estou com um pouco de dor de cabeça agora. Tente novamente em instantes."
+    return "Desculpe, estou com um pouco de dor de cabeça agora. Tente novamente em instantes."
 
 # --- FUNÇÃO DE ENVIO DE WHATSAPP ---
 def enviar_resposta(numero_destino, texto_resposta):
-    url = f"https://graph.facebook.com/v21.0/{PHONE_ID}/messages"
+    url = f"https://graph.facebook.com/{API_VERSION}/{PHONE_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
@@ -78,11 +80,15 @@ async def verify_webhook(
     hub_verify_token: str = Query(None, alias="hub.verify_token")
 ):
     # Pode colocar a string direta aqui ou puxar do .env
-    VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "seu_token_secreto") 
+    VERIFY_TOKEN = "seu_token_secreto" 
     
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        print("Webhook validado pela Meta!")
-        return int(hub_challenge)
+        print("✅ Webhook validado pela Meta!")
+        # A Meta exige retorno em texto puro, não JSON:
+        return PlainTextResponse(content=hub_challenge)
+    
+    # Print para debug se os tokens não baterem:
+    print(f"❌ Falha. Token no .env: {VERIFY_TOKEN} | Token da Meta: {hub_verify_token}")
     return {"status": "error", "message": "Falha na validação"}
 
 # 2. Recebimento das Mensagens (POST)
@@ -110,12 +116,14 @@ async def receive_webhook(request: Request):
             nome = value["contacts"][0]["profile"]["name"]
             
             if texto_usuario:
-                print(f"📩 {nome} disse: {texto_usuario}")
+                # print(f"📩 {nome} disse: {texto_usuario}")
+                print(f"📩 {nome} enviou mensagem!")
                 
                 # --- A MÁGICA ACONTECE AQUI ---
                 resposta_ia = consultar_ia(texto_usuario)
                 
-                print(f"🤖 IA respondeu: {resposta_ia}")
+                # print(f"🤖 IA respondeu: {resposta_ia}")
+                print("🤖 IA respondeu")
                 enviar_resposta(numero, resposta_ia)
 
     except Exception as e:
