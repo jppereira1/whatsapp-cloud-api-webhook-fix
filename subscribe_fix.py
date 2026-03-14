@@ -15,9 +15,9 @@ def fix_webhook_connection():
     sub_resp = requests.post(url_subscribe, headers=headers, json=payload)
     
     if sub_resp.status_code == 200 and sub_resp.json().get('success'):
-        print("✅ SUCESSO! A conexão foi restabelecida.")
+        print("SUCESSO! A conexão foi restabelecida.")
     else:
-        print(f"❌ Falha ao assinar: {sub_resp.text}")
+        print(f"Falha ao assinar: {sub_resp.text}")
 
 if __name__ == "__main__":
     fix_webhook_connection()

@@ -27,7 +27,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # --- O CÉREBRO (IA) ---
 def consultar_ia(texto_usuario):
-    print("🧠 Consultando a OpenAI...")
+    print("Consultando a OpenAI...")
     try:
         resposta = client.chat.completions.create(
             model="gpt-3.5-turbo", # Pode usar gpt-4o-mini se preferir (é mais barato e rápido)
@@ -47,7 +47,7 @@ def consultar_ia(texto_usuario):
         )
         return resposta.choices[0].message.content
     except Exception as e:
-        print(f"❌ Erro na IA: {e}")
+        print(f"Erro na IA: {e}")
     return "Desculpe, estou com um pouco de dor de cabeça agora. Tente novamente em instantes."
 
 # --- FUNÇÃO DE ENVIO DE WHATSAPP ---
@@ -70,7 +70,7 @@ from fastapi import Query
 
 @app.get("/")
 def home():
-    return {"message": "O Bot está ON! 🤖 Vá para /webhook"}
+    return {"message": "O Bot está ON! Vá para /webhook"}
 
 # 1. Validação do Webhook (GET)
 @app.get("/webhook")
@@ -83,12 +83,12 @@ async def verify_webhook(
     VERIFY_TOKEN = "seu_token_secreto" 
     
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        print("✅ Webhook validado pela Meta!")
+        print("Webhook validado pela Meta!")
         # A Meta exige retorno em texto puro, não JSON:
         return PlainTextResponse(content=hub_challenge)
     
     # Print para debug se os tokens não baterem:
-    print(f"❌ Falha. Token no .env: {VERIFY_TOKEN} | Token da Meta: {hub_verify_token}")
+    print(f"Falha. Token no .env: {VERIFY_TOKEN} | Token da Meta: {hub_verify_token}")
     return {"status": "error", "message": "Falha na validação"}
 
 # 2. Recebimento das Mensagens (POST)
@@ -116,18 +116,18 @@ async def receive_webhook(request: Request):
             nome = value["contacts"][0]["profile"]["name"]
             
             if texto_usuario:
-                # print(f"📩 {nome} disse: {texto_usuario}")
-                print(f"📩 {nome} enviou mensagem!")
+                # print(f"{nome} disse: {texto_usuario}")
+                print(f"{nome} enviou mensagem!")
                 
                 # --- A MÁGICA ACONTECE AQUI ---
                 resposta_ia = consultar_ia(texto_usuario)
                 
-                # print(f"🤖 IA respondeu: {resposta_ia}")
-                print("🤖 IA respondeu")
+                # print(f"IA respondeu: {resposta_ia}")
+                print("IA respondeu")
                 enviar_resposta(numero, resposta_ia)
 
     except Exception as e:
-        print(f"❌ Erro no webhook: {e}")
+        print(f"Erro no webhook: {e}")
     
     return {"status": "received"}
 
